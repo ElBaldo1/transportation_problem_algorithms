@@ -85,7 +85,7 @@ This repository contains Python implementations of algorithms designed to solve 
 
 Install the required libraries using:
 ```bash
-pip install matplotlib numpy pulp pandas
+pip install matplotlib numpy pulp pandas networkx
 ```
 
 ---
