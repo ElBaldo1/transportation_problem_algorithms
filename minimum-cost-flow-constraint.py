@@ -1,44 +1,77 @@
-from pulp import LpProblem, LpMinimize, LpVariable, lpSum
+from pulp import LpProblem, LpMinimize, LpVariable, PULP_CBC_CMD
 
-# Definisci il problema
+# Define the problem
+# This is a linear programming problem to minimize the total cost of flow in a network
 problem = LpProblem("Minimum_Cost_Flow", LpMinimize)
 
-# Definisci le variabili decisionali per gli archi (x_ij rappresenta il flusso da nodo i a nodo j)
-x12 = LpVariable("x12", lowBound=0)
-x13 = LpVariable("x13", lowBound=0)
-x24 = LpVariable("x24", lowBound=0)
-x25 = LpVariable("x25", lowBound=0)
-x34 = LpVariable("x34", lowBound=0)
-x35 = LpVariable("x35", lowBound=0)
-x45 = LpVariable("x45", lowBound=0)
+# Define decision variables (flows on edges)
+# Each variable represents the flow along an edge in the network, with a lower bound of 0 (non-negative flow)
+x12 = LpVariable("x12", lowBound=0)  # Flow from node 1 to node 2
+x13 = LpVariable("x13", lowBound=0)  # Flow from node 1 to node 3
+x24 = LpVariable("x24", lowBound=0)  # Flow from node 2 to node 4
+x25 = LpVariable("x25", lowBound=0)  # Flow from node 2 to node 5
+x34 = LpVariable("x34", lowBound=0)  # Flow from node 3 to node 4
+x35 = LpVariable("x35", lowBound=0)  # Flow from node 3 to node 5
+x45 = LpVariable("x45", lowBound=0)  # Flow from node 4 to node 5
 
-# Funzione obiettivo (sostituisci i costi con i costi degli archi del tuo grafo)
-# al posto di 4,8 ecc meetere il costo dellarco
-problem += 5 * x12 + 8 * x13 + 5 * x24 + 6 * x34 + 7 * x25 + 3 * x35 + 4 * x45, "Total Cost"
+# Define the objective function (minimize total cost)
+# The objective is to minimize the total cost associated with the flows on each edge
+problem += (
+    5 * x12 + 8 * x13 + 5 * x24 + 6 * x34 + 3 * x25 + 7 * x35 + 4 * x45
+), "Total Cost"
 
-# Vincoli per la conservazione del flusso in ogni nodo
-# Nodo 1 (supply): Nodo 1 fornisce 6 unità
-# mettere il numero che ce sopra il nodo
-problem += x12 + x13 == 6, "Node_1"
+# Flow conservation constraints
+# Node 1 (Supply): Total flow out of node 1 must equal 6 units
+# all positive ---> furniture node
+problem += x12 + x13 == 6, "Node_1_Supply"
 
-# Nodo 2 (transshipment): Nodo 2 è un nodo intermedio senza offerta o domanda netta
-problem += x12 - x24 - x25 == 0, "Node_2"
+# Node 2 (Balance): Flow into node 2 equals flow out of node 2
+problem += x12 - x24 - x25 == 0, "Node_2_Balance"
 
-# Nodo 3 (supply): Nodo 3 fornisce 4 unità
-problem += x13 - x34 - x35 == 4, "Node_3"
+# Node 3 (Supply): Total flow out of node 3 must exceed flow into node 3 by 4 units
+problem += x13 - x34 - x35 == 4, "Node_3_Supply"
 
-# Nodo 4 (demand): Nodo 4 richiede 5 unità
-problem += x24 + x34 - x45 == -5, "Node_4"
+# Node 4 (Demand): Total flow into node 4 minus flow out must equal -5 (demand)
+problem += x24 + x34 - x45 == -5, "Node_4_Demand"
 
-# Nodo 5 (demand): Nodo 5 richiede 5 unità
-problem += x25 + x35 + x45 == -5, "Node_5"
+# Node 5 (Demand): Total flow into node 5 must equal -5 (demand)
+## all plus demand-only node
+problem += x25 + x35 + x45 == -5, "Node_5_Demand"
 
-# Risolvi il problema
-problem.solve()
+# Debugging: Print the problem formulation
+print("=== Linear Programming Problem ===")
+print(problem)
 
-# Stampa i risultati
-print("Status:", problem.status)
-print("Valore della funzione obiettivo (Costo Minimo):", problem.objective.value())
-print("Flussi:")
-for v in problem.variables():
-    print(f"{v.name}: {v.varValue}")
+# Solve the problem with CBC solver
+problem.solve(PULP_CBC_CMD(msg=True))
+
+# Output the results
+print("\n=== RESULTS ===")
+
+# Status of the solution
+status_dict = {
+    1: "Optimal",   # Solution found and satisfies all constraints
+    0: "Not Solvable",  # Problem is unsolvable
+    -1: "Infeasible",  # Constraints conflict, no solution exists
+    -2: "Unbounded",  # Problem is unbounded (objective can go to infinity)
+    -3: "Error"       # An error occurred during solving
+}
+print(f"Solution Status: {status_dict.get(problem.status, 'Unknown')}")
+
+# Value of the objective function (minimum total cost)
+if problem.status == 1:  # If the solution is optimal
+    print(f"Minimum Total Cost: {problem.objective.value()}\n")
+
+    # Print the optimal flow on each edge (only if the flow > 0)
+    print("Optimal Flows on Edges:")
+    for v in problem.variables():
+        if v.varValue > 0:
+            print(f"  {v.name}: {v.varValue} units")
+
+    # Print the edges with no flow (optional for analysis)
+    print("\nEdges with No Flow:")
+    for v in problem.variables():
+        if v.varValue == 0:
+            print(f"  {v.name}: {v.varValue} units")
+else:
+    print("The problem could not be solved due to infeasibility or other issues.")
